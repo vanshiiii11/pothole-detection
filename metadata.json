@@ -1,0 +1,5 @@
+{
+  "name": "Pothole Detection Analytics Dashboard",
+  "description": "A comprehensive platform for analyzing pothole detection data from CSV files, featuring real-time statistics, graphical analysis, and multi-dataset support.",
+  "requestFramePermissions": []
+}
