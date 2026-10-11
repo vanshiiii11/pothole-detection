@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { Video, Link, Play, AlertCircle, Loader2, CheckCircle2, RefreshCw, Info } from 'lucide-react';
-import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { PotholeData, VideoAnalysisResult } from '../types';
 import { cn } from '../lib/utils';
 
@@ -91,76 +90,30 @@ export const VideoAnalysis: React.FC<VideoAnalysisProps> = ({ onAnalysisComplete
 
       setProgress(30);
 
-      if (!process.env.GEMINI_API_KEY) {
-        throw new Error("Gemini API Key is missing. Please check your environment configuration.");
-      }
-
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
-      // Use gemini-3.1-flash-lite-preview for ultra-low latency analysis
-      const modelName = "gemini-3.1-flash-lite-preview";
-      
-      const prompt = `
-        ULTRA-FAST SCAN: Analyze this video for road potholes. 
-        Provide a concise JSON array of key detection points.
-        Focus only on significant detections to minimize processing time.
-        
-        Fields required for each object:
-        - altitude: number (1.0 to 5.0)
-        - latitude: number (e.g. 34.0522)
-        - longitude: number (e.g. -118.2437)
-        - gps_status: string ("Fixed" or "Searching")
-        - pothole_count: number (count visible)
-        - severity: number (1-5)
-        - average_confidence: number (0.0-1.0)
-        - frames_with_detection: number (0-60)
-        - time_processing: number (10-50)
-        - timestamp: string (ISO format)
-
-        Return ONLY the JSON array.
-      `;
-
       let resultData: PotholeData[] = [];
-      
+
       try {
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: [
-            {
-              inlineData: {
-                mimeType: mimeType || 'video/mp4',
-                data: base64Data
-              }
-            },
-            { text: prompt }
-          ],
-          config: {
-            responseMimeType: "application/json",
-            thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
-            responseSchema: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  altitude: { type: Type.NUMBER },
-                  latitude: { type: Type.NUMBER },
-                  longitude: { type: Type.NUMBER },
-                  gps_status: { type: Type.STRING },
-                  pothole_count: { type: Type.NUMBER },
-                  severity: { type: Type.NUMBER },
-                  average_confidence: { type: Type.NUMBER },
-                  frames_with_detection: { type: Type.NUMBER },
-                  time_processing: { type: Type.NUMBER },
-                  timestamp: { type: Type.STRING }
-                },
-                required: ["altitude", "latitude", "longitude", "gps_status", "pothole_count", "severity", "average_confidence", "frames_with_detection", "time_processing", "timestamp"]
-              }
-            }
-          }
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            base64Data,
+            mimeType: mimeType || 'video/mp4'
+          }),
         });
 
-        if (response.text) {
-          resultData = JSON.parse(response.text);
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || errData.message || `Server responded with status ${response.status}`);
+        }
+
+        const json = await response.json();
+        if (Array.isArray(json.data)) {
+          resultData = json.data;
+        } else {
+          throw new Error('Invalid response structure received from detection server');
         }
       } catch (apiErr) {
         console.warn("AI Analysis encountered an issue, generating high-precision results from video stream:", apiErr);
